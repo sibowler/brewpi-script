@@ -118,8 +118,20 @@ class Brewometer:
         with self.lock:
             self.cleanValues()
             self.calibrate()
-            calibratedTemperature = self.tempCalibrationFunction(temperature)
-            calibratedGravity = self.gravityCalibrationFunction(gravity)
+            
+            calibratedTemperature = temperature
+            calibratedGravity = gravity
+            
+            try:
+                calibratedTemperature = self.tempCalibrationFunction(temperature)
+            except Exception, e:
+                print "ERROR: Brewometer (" + self.colour + "): Unable to calibrate temperature: " + str(temperature) + " - " + e.message
+                
+            try:
+                calibratedGravity = self.gravityCalibrationFunction(gravity)
+            except Exception, e:
+                print "ERROR: Brewometer (" + self.colour + "): Unable to calibrate gravity: " + str(gravity) + " - " + e.message
+            
             self.values.append(BrewometerValue(calibratedTemperature, calibratedGravity))
             
     def getValues(self):
