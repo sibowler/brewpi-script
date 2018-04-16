@@ -20,49 +20,36 @@ import time
 from distutils.version import LooseVersion
 from BrewPiUtil import asciiToUnicode
 from serial import SerialException
+import re
 
-def getVersionFromSerial(ser):
+def getVersionFromSerial(bg_ser):
     version = None
     retries = 0
-    oldTimeOut = ser.timeout
-    startTime = time.time()
-    if not ser.isOpen():
-        print "Cannot get version from serial port that is not open."
-
-    ser.timeout = 1
-    ser.write('n')  # request version info
+    startTime = time.time()    
+    bg_ser.writeln('n')  # request version info
     while retries < 10:
         retry = True
-        while 1: # read all lines from serial
-            loopTime = time.time()
-            line = None
-            try:
-                line = ser.readline()
-            except SerialException as e:
-                pass
+        while True: # read all lines from serial
+            line = bg_ser.read_line()
             if line:
-                line = asciiToUnicode(line)
                 if line[0] == 'N':
                     data = line.strip('\n')[2:]
-                    version = AvrInfo(data)
-                    if version and version.version != "0.0.0":
+                    version_parsed = AvrInfo(data)
+                    if version_parsed and version_parsed.version != "0.0.0":
                         retry = False
+                        version = version_parsed
                         break
-            if time.time() - loopTime >= ser.timeout:
-                # have read entire buffer, now just reading data as it comes in. Break to prevent an endless loop.
+            else:
                 break
-            if time.time() - startTime >= 10:
-                # try max 10 seconds
-                retry = False
-                break
-
+        if time.time() - startTime >= 30:
+            # try max 30 seconds
+            retry = False
         if retry:
-            ser.write('n')  # request version info
-            # time.sleep(1) delay not needed because of blocking (timeout) readline
+            bg_ser.writeln('n')  # request version info
             retries += 1
+            time.sleep(1)
         else:
             break
-    ser.timeout = oldTimeOut # restore previous serial timeout value
     return version
 
 
@@ -80,16 +67,18 @@ class AvrInfo:
     shield_revC = "revC"
     spark_shield_v1 = "V1"
     spark_shield_v2 = "V2"
+    spark_shield_v3 = "V3"
 
-    shields = {1: shield_revA, 2: shield_revC, 3: spark_shield_v1, 4: spark_shield_v2}
+    shields = {1: shield_revA, 2: shield_revC, 3: spark_shield_v1, 4: spark_shield_v2, 5: spark_shield_v3}
 
     board_leonardo = "leonardo"
     board_standard = "uno"
     board_mega = "mega"
     board_spark_core = "core"
     board_photon = "photon"
+    board_p1 = "p1"
 
-    boards = {'l': board_leonardo, 's': board_standard, 'm': board_mega, 'x': board_spark_core, 'y': board_photon}
+    boards = {'l': board_leonardo, 's': board_standard, 'm': board_mega, 'x': board_spark_core, 'y': board_photon, 'p': board_p1}
 
     family_arduino = "Arduino"
     family_spark = "Particle"
@@ -98,13 +87,15 @@ class AvrInfo:
                 board_standard: family_arduino,
                 board_mega: family_arduino,
                 board_spark_core: family_spark,
-                board_photon: family_spark}
+                board_photon: family_spark,
+                board_p1: family_spark}
 
     board_names = { board_leonardo: "Leonardo",
                 board_standard: "Uno",
                 board_mega: "Mega",
                 board_spark_core: "Core",
-                board_photon: "Photon"}
+                board_photon: "Photon",
+                board_p1: "p1"}
 
     def __init__(self, s=None):
         self.version = LooseVersion("0.0.0")
@@ -162,7 +153,9 @@ class AvrInfo:
             self.commit = j[AvrInfo.commit]
 
     def parseStringVersion(self, s):
-        self.version = LooseVersion(s)
+        pattern = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+.*")
+        if pattern.match(s): # check for valid string
+            self.version = LooseVersion(s)
 
     def toString(self):
         if self.version:
